@@ -7,11 +7,17 @@
 
 import Cocoa
 
+protocol DragDropViewDelegate: AnyObject {
+    func dragDropView(_ view: DragDropView, didUpdateFileURLs fileURLs: [URL])
+}
+
 class DragDropView: NSView {
+
+    weak var delegate: DragDropViewDelegate?
 
     var fileURLs: [URL] = [] {
         didSet {
-            print("ファイルが追加されました\(fileURLs)")
+            delegate?.dragDropView(self, didUpdateFileURLs: fileURLs)
         }
     }
 
@@ -29,12 +35,19 @@ class DragDropView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         if containsPNGFile(draggingInfo: sender) {
+            layer?.borderWidth = 3
+            layer?.borderColor = NSColor.blue.cgColor
             return .copy
         }
         return []
     }
+    
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        layer?.borderWidth = 0
+    }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        layer?.borderWidth = 0
         let pasteboard = sender.draggingPasteboard
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
             for url in urls where url.pathExtension == "png" {
