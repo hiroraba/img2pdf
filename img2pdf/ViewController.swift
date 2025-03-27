@@ -126,6 +126,14 @@ class ViewController: NSViewController {
     @objc func exportPDF() {
         let fileURLs = dragDropView.fileURLs
 
+        guard !fileURLs.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "エラー"
+            alert.informativeText = "画像ファイルが追加されていません"
+            alert.runModal()
+            return
+        }
+
         let sortedFileURLs = fileURLs.sorted { (url1, url2) -> Bool in
             url1.lastPathComponent.localizedStandardCompare(url2.lastPathComponent) == .orderedAscending
         }
@@ -175,34 +183,77 @@ class ViewController: NSViewController {
         return processedImage
     }
 
+    // swiftlint:disable:next function_body_length
     func createPDF(fileURLs: [URL], outputURL: URL) {
-        let pdfDocument = PDFKit.PDFDocument()
+        let pdfDocument = PDFDocument()
+        let targetDPI: CGFloat = 300.0
+        let pointsPerInch: CGFloat = 72.0
+
+        print("Creating PDF at \(fileURLs.count) pages to \(outputURL)")
+
         for (index, fileURL) in fileURLs.enumerated() {
+            print("Processing file: \(fileURL)")
+            guard let originalImage = NSImage(contentsOf: fileURL) else {
+                print("Failed to load image from \(fileURL)")
+                continue
+            }
 
-            guard let originalImage = NSImage(contentsOf: fileURL) else { continue }
-
+            // 前処理適用（失敗した場合は元画像）
             let processedImage = preprocessImage(image: originalImage) ?? originalImage
-            guard let cgImage = processedImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
 
-            let imageWidth = CGFloat(cgImage.width)
-            let imageHeight = CGFloat(cgImage.height)
-            let pageRect = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
+            var proposedRect = NSRect(origin: .zero, size: processedImage.size)
+            guard let cgImage = processedImage.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+                print("Failed to convert processed image to CGImage for \(fileURL)")
+                continue
+            }
+
+            let pixelWidth = CGFloat(cgImage.width)
+            let pixelHeight = CGFloat(cgImage.height)
+            let pageWidth = pixelWidth * pointsPerInch / targetDPI
+            let pageHeight = pixelHeight * pointsPerInch / targetDPI
+            let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
+            print("Page rect: \(pageRect)")
 
             let data = NSMutableData()
-            guard let consumer = CGDataConsumer(data: data as CFMutableData) else { continue }
+            guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
+                print("Failed to create CGDataConsumer")
+                continue
+            }
             var mediaBox = pageRect
-            guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { continue }
+            guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+                print("Failed to create CGContext")
+                continue
+            }
 
             context.beginPDFPage(nil)
-            context.draw(cgImage, in: pageRect)
+            context.interpolationQuality = .high
+
+            let scaleFactor = pointsPerInch / targetDPI
+            context.scaleBy(x: scaleFactor, y: scaleFactor)
+
+            let imageRect = CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
+            context.draw(cgImage, in: imageRect)
+
             context.endPDFPage()
             context.closePDF()
 
             if let tempDoc = PDFDocument(data: data as Data), let pdfPage = tempDoc.page(at: 0) {
                 pdfDocument.insert(pdfPage, at: index)
+                print("Inserted PDF page for \(fileURL)")
+            } else {
+                print("Failed to extract PDF page from temporary document for \(fileURL)")
             }
         }
-        pdfDocument.write(to: outputURL)
+
+        if pdfDocument.pageCount > 0 {
+            if pdfDocument.write(to: outputURL) {
+                print("PDF successfully written to \(outputURL)")
+            } else {
+                print("Failed to write PDF to \(outputURL)")
+            }
+        } else {
+            print("No PDF pages were created.")
+        }
     }
 }
 
