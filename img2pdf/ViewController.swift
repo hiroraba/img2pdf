@@ -77,11 +77,11 @@ class ViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
         // ドラッグ＆ドロップのデリゲート設定
         dragDropView.delegate = self
         view.addSubview(dragDropView)
-        
+
         // dragDropView をウィンドウ全体にフィットさせる
         NSLayoutConstraint.activate([
             dragDropView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -89,21 +89,21 @@ class ViewController: NSViewController {
             dragDropView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             dragDropView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        
+
         // テーブルビューをスクロールビューにセット
         tableScrollView.documentView = tableView
-        
+
         // ボタンスタックに Import と Export ボタンを追加
         buttonStackView.addArrangedSubview(importButton)
         buttonStackView.addArrangedSubview(exportButton)
         // ボタンスタックの高さは固定（例：40pt）
         buttonStackView.heightAnchor.constraint(equalToConstant: 40).isActive = true
-        
+
         // コンテンツスタックにテーブルビューとボタンスタックを追加
         contentStackView.addArrangedSubview(tableScrollView)
         contentStackView.addArrangedSubview(buttonStackView)
         view.addSubview(contentStackView)
-        
+
         // コンテンツスタックをウィンドウ全体にマージン付きで配置
         NSLayoutConstraint.activate([
             contentStackView.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
@@ -111,13 +111,13 @@ class ViewController: NSViewController {
             contentStackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             contentStackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20)
         ])
-        
+
         // ここでは、tableScrollView は特に固定の高さは与えず、contentStackView 内で残りのスペースを埋めるようにします。
-        
+
         // テーブルビューの delegate と dataSource の設定
         tableView.delegate = self
         tableView.dataSource = self
-        
+
         // ボタンのターゲット設定
         importButton.target = self
         exportButton.target = self
@@ -139,7 +139,7 @@ class ViewController: NSViewController {
             }
         })
     }
-    
+
     @objc func importFiles() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png]
@@ -151,29 +151,55 @@ class ViewController: NSViewController {
         }
     }
 
+    func preprocessImage(image: NSImage) -> NSImage? {
+        guard let tiffData = image.tiffRepresentation,
+              let ciImage = CIImage(data: tiffData) else {
+            return nil
+        }
+
+        guard let filter = CIFilter(name: "CIColorControls") else {
+            return nil
+        }
+        filter.setValue(ciImage, forKey: kCIInputImageKey)
+        filter.setValue(1.5, forKey: kCIInputContrastKey)
+        filter.setValue(0.0, forKey: kCIInputBrightnessKey)
+        filter.setValue(1.0, forKey: kCIInputSaturationKey)
+
+        guard let outputImage = filter.outputImage else {
+            return nil
+        }
+
+        let rep = NSCIImageRep(ciImage: outputImage)
+        let processedImage = NSImage(size: rep.size)
+        processedImage.addRepresentation(rep)
+        return processedImage
+    }
+
     func createPDF(fileURLs: [URL], outputURL: URL) {
         let pdfDocument = PDFKit.PDFDocument()
         for (index, fileURL) in fileURLs.enumerated() {
-            if let image = NSImage(contentsOf: fileURL),
-                let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
 
-                let imageWidth = image.size.width
-                let imageHeight = image.size.height
-                let pageRect = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
+            guard let originalImage = NSImage(contentsOf: fileURL) else { continue }
 
-                let data = NSMutableData()
-                guard let consumer = CGDataConsumer(data: data as CFMutableData) else { continue }
-                var mediaBox = pageRect
-                guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { continue }
+            let processedImage = preprocessImage(image: originalImage) ?? originalImage
+            guard let cgImage = processedImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
 
-                context.beginPDFPage(nil)
-                context.draw(cgImage, in: pageRect)
-                context.endPDFPage()
-                context.closePDF()
+            let imageWidth = CGFloat(cgImage.width)
+            let imageHeight = CGFloat(cgImage.height)
+            let pageRect = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
 
-                if let tempDoc = PDFDocument(data: data as Data), let pdfPage = tempDoc.page(at: 0) {
-                    pdfDocument.insert(pdfPage, at: index)
-                }
+            let data = NSMutableData()
+            guard let consumer = CGDataConsumer(data: data as CFMutableData) else { continue }
+            var mediaBox = pageRect
+            guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { continue }
+
+            context.beginPDFPage(nil)
+            context.draw(cgImage, in: pageRect)
+            context.endPDFPage()
+            context.closePDF()
+
+            if let tempDoc = PDFDocument(data: data as Data), let pdfPage = tempDoc.page(at: 0) {
+                pdfDocument.insert(pdfPage, at: index)
             }
         }
         pdfDocument.write(to: outputURL)

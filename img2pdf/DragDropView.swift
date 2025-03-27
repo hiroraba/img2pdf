@@ -41,7 +41,7 @@ class DragDropView: NSView {
         }
         return []
     }
-    
+
     override func draggingExited(_ sender: NSDraggingInfo?) {
         layer?.borderWidth = 0
     }
