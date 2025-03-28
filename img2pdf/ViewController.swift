@@ -9,10 +9,23 @@ import Cocoa
 import PDFKit
 
 class ViewController: NSViewController {
+    
+    let backgroundView: NSVisualEffectView = {
+        let view = NSVisualEffectView()
+        view.material = Theme.visualEffectViewMaterial
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
 
     let dragDropView: DragDropView = {
         let view = DragDropView()
         view.translatesAutoresizingMaskIntoConstraints = false
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 10
+        view.layer?.borderWidth = 1
+        view.layer?.borderColor = NSColor.separatorColor.cgColor
         return view
     }()
 
@@ -20,6 +33,8 @@ class ViewController: NSViewController {
         let button = NSButton(title: "Export", target: nil, action: #selector(exportPDF))
         button.bezelStyle = .rounded
         button.translatesAutoresizingMaskIntoConstraints = false
+        button.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        button.contentTintColor = Theme.accentColor
         return button
     }()
 
@@ -27,6 +42,8 @@ class ViewController: NSViewController {
         let button = NSButton(title: "Import", target: nil, action: #selector(importFiles))
         button.bezelStyle = .rounded
         button.translatesAutoresizingMaskIntoConstraints = false
+        button.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        button.contentTintColor = Theme.accentColor
         return button
     }()
 
@@ -36,6 +53,7 @@ class ViewController: NSViewController {
         stackView.spacing = 20
         stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.alignment = .centerY
+        stackView.heightAnchor.constraint(equalToConstant: 40).isActive = true
         return stackView
     }()
 
@@ -49,11 +67,13 @@ class ViewController: NSViewController {
 
     let tableView: NSTableView = {
         let tableView = NSTableView()
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("FileColumn"))
-        column.title = "画像ファイル"
-        tableView.addTableColumn(column)
-        tableView.headerView = nil
         tableView.translatesAutoresizingMaskIntoConstraints = false
+        
+        tableView.rowHeight = 40
+        tableView.font = NSFont.systemFont(ofSize: 13)
+        tableView.backgroundColor = NSColor.clear
+        
+        tableView.headerView?.isHidden = true
         return tableView
     }()
 
@@ -61,12 +81,30 @@ class ViewController: NSViewController {
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
+        
+        scrollView.wantsLayer = true
+        scrollView.layer?.borderWidth = 1
+        scrollView.layer?.borderColor = NSColor.separatorColor.cgColor
+        
+        scrollView.backgroundColor = Theme.backgroundColor
         return scrollView
+    }()
+    
+    let emptyListOverlay: NSTextField = {
+        let label = NSTextField(labelWithString: "image files will be displayed here")
+        label.font = NSFont.systemFont(ofSize: 16, weight: .medium)
+        label.textColor = Theme.overlayTextColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.alignment = .center
+        label.isHidden = false
+        return label
     }()
 
     var fileURLs: [URL] = [] {
         didSet {
             tableView.reloadData()
+            emptyListOverlay.isHidden = !fileURLs.isEmpty
+            tableView.headerView?.isHidden = fileURLs.isEmpty
         }
     }
 
@@ -75,8 +113,17 @@ class ViewController: NSViewController {
         self.view.translatesAutoresizingMaskIntoConstraints = false
     }
 
+    // swiftlint:disable:next function_body_length
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        view.addSubview(backgroundView)
+        NSLayoutConstraint.activate([
+            backgroundView.topAnchor.constraint(equalTo: view.topAnchor),
+            backgroundView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
 
         // ドラッグ＆ドロップのデリゲート設定
         dragDropView.delegate = self
@@ -92,6 +139,13 @@ class ViewController: NSViewController {
 
         // テーブルビューをスクロールビューにセット
         tableScrollView.documentView = tableView
+        
+        let clipView = tableScrollView.contentView
+        clipView.addSubview(emptyListOverlay)
+        NSLayoutConstraint.activate([
+            emptyListOverlay.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
+            emptyListOverlay.centerYAnchor.constraint(equalTo: clipView.centerYAnchor)
+        ])
 
         // ボタンスタックに Import と Export ボタンを追加
         buttonStackView.addArrangedSubview(importButton)
@@ -111,14 +165,26 @@ class ViewController: NSViewController {
             contentStackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             contentStackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20)
         ])
-
-        // ここでは、tableScrollView は特に固定の高さは与えず、contentStackView 内で残りのスペースを埋めるようにします。
-
-        // テーブルビューの delegate と dataSource の設定
+        
+        let indexColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("IndexColumn"))
+        indexColumn.title = "No."
+        indexColumn.width = 50
+        
+        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("NameColumn"))
+        nameColumn.title = "Name"
+        nameColumn.width = 200
+        
+        let dateColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("DateColumn"))
+        dateColumn.title = "Date"
+        dateColumn.width = 150
+        
+        tableView.addTableColumn(indexColumn)
+        tableView.addTableColumn(nameColumn)
+        tableView.addTableColumn(dateColumn)
+        
         tableView.delegate = self
         tableView.dataSource = self
 
-        // ボタンのターゲット設定
         importButton.target = self
         exportButton.target = self
     }
@@ -128,8 +194,8 @@ class ViewController: NSViewController {
 
         guard !fileURLs.isEmpty else {
             let alert = NSAlert()
-            alert.messageText = "エラー"
-            alert.informativeText = "画像ファイルが追加されていません"
+            alert.messageText = "error"
+            alert.informativeText = "image files are empty"
             alert.runModal()
             return
         }
@@ -271,13 +337,37 @@ extension ViewController: NSTableViewDataSource, NSTableViewDelegate {
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let fileURL = fileURLs[row]
-        let identifier = NSUserInterfaceItemIdentifier("FileCell")
-        var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+        var cellIdentifier: String = ""
+        var text: String = ""
+  
+        if tableColumn?.identifier == NSUserInterfaceItemIdentifier("IndexColumn") {
+            cellIdentifier = "IndexCell"
+            text = "\(row + 1)"
+        } else if tableColumn?.identifier == NSUserInterfaceItemIdentifier("NameColumn") {
+            cellIdentifier = "NameCell"
+            text = fileURL.lastPathComponent
+        } else if tableColumn?.identifier == NSUserInterfaceItemIdentifier("DateColumn") {
+            cellIdentifier = "DateCell"
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+               let date = attributes[.creationDate] as? Date {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                text = formatter.string(from: date)
+            } else {
+                text = "Unknown"
+            }
+        }
+        
+        // swiftlint:disable:next line_length
+        var cell = tableView.makeView(withIdentifier: NSUserInterfaceItemIdentifier(cellIdentifier), owner: self) as? NSTableCellView
         if cell == nil {
             cell = NSTableCellView()
-            cell?.identifier = identifier
-            let textField = NSTextField(labelWithString: fileURL.lastPathComponent)
+            cell?.identifier = NSUserInterfaceItemIdentifier(cellIdentifier)
+            let textField = NSTextField(labelWithString: text)
             textField.translatesAutoresizingMaskIntoConstraints = false
+            textField.font = NSFont.systemFont(ofSize: 14)
+            textField.textColor = Theme.textColor
             cell?.addSubview(textField)
             NSLayoutConstraint.activate([
                 textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 5),
