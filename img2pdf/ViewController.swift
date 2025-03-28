@@ -8,6 +8,7 @@
 import Cocoa
 import PDFKit
 
+// swiftlint:disable:next type_body_length
 class ViewController: NSViewController {
     
     let backgroundView: NSVisualEffectView = {
@@ -29,21 +30,65 @@ class ViewController: NSViewController {
         return view
     }()
 
-    let exportButton: NSButton = {
-        let button = NSButton(title: "Export", target: nil, action: #selector(exportPDF))
+    let exportButton: HighlightButton = {
+        let button = HighlightButton(title: "📤 Export", target: nil, action: #selector(exportPDF))
+        button.isBordered = false
         button.bezelStyle = .rounded
+        button.wantsLayer = true
+        
+        button.layer?.backgroundColor = Theme.molokaiExportColor.cgColor
+        button.layer?.cornerRadius = 8
+        button.layer?.masksToBounds = true
+        button.contentTintColor = Theme.molokaiTextColor
+        button.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        button.contentTintColor = Theme.accentColor
+
+        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+
         return button
     }()
 
-    let importButton: NSButton = {
-        let button = NSButton(title: "Import", target: nil, action: #selector(importFiles))
+    let importButton: HighlightButton = {
+        let button = HighlightButton(title: "📂 Import", target: nil, action: #selector(importFiles))
+        
+        button.isBordered = false
         button.bezelStyle = .rounded
+        button.wantsLayer = true
+        
+        button.layer?.backgroundColor = Theme.molokaiImportColor.cgColor
+        button.layer?.cornerRadius = 8
+        button.layer?.masksToBounds = true
+        button.contentTintColor = Theme.molokaiTextColor
+        button.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        button.contentTintColor = Theme.accentColor
+        
+        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+
+        return button
+    }()
+    
+    let deleteButton: HighlightButton = {
+        let button = HighlightButton(title: "🗑 Delete", target: nil, action: #selector(deleteSelectedImages))
+        button.isBordered = false
+        button.bezelStyle = .rounded
+        button.wantsLayer = true
+        
+        button.layer?.backgroundColor = Theme.molokaiDeleteColor.cgColor
+        button.layer?.cornerRadius = 8
+        button.layer?.masksToBounds = true
+        button.contentTintColor = Theme.molokaiTextColor
+        button.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        
+        button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+        
+        // 初期値は非活性
+        button.isEnabled = false
+        button.alphaValue = 0.5
+
         return button
     }()
 
@@ -72,8 +117,9 @@ class ViewController: NSViewController {
         tableView.rowHeight = 40
         tableView.font = NSFont.systemFont(ofSize: 13)
         tableView.backgroundColor = NSColor.clear
-        
         tableView.headerView?.isHidden = true
+        
+        tableView.allowsMultipleSelection = true
         return tableView
     }()
 
@@ -84,15 +130,15 @@ class ViewController: NSViewController {
         
         scrollView.wantsLayer = true
         scrollView.layer?.borderWidth = 1
-        scrollView.layer?.borderColor = NSColor.separatorColor.cgColor
+        scrollView.layer?.borderColor = Theme.accentColor.cgColor
         
-        scrollView.backgroundColor = Theme.backgroundColor
+        scrollView.backgroundColor = Theme.molokaiBackgroundColor
         return scrollView
     }()
     
     let emptyListOverlay: NSTextField = {
         let label = NSTextField(labelWithString: "image files will be displayed here")
-        label.font = NSFont.systemFont(ofSize: 16, weight: .medium)
+        label.font = NSFont.systemFont(ofSize: 20, weight: .bold)
         label.textColor = Theme.overlayTextColor
         label.translatesAutoresizingMaskIntoConstraints = false
         label.alignment = .center
@@ -134,7 +180,10 @@ class ViewController: NSViewController {
             backgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-
+        
+        backgroundView.wantsLayer = true
+        backgroundView.layer?.backgroundColor = Theme.molokaiBackgroundColor.cgColor
+               
         // ドラッグ＆ドロップのデリゲート設定
         dragDropView.delegate = self
         view.addSubview(dragDropView)
@@ -156,12 +205,12 @@ class ViewController: NSViewController {
             emptyListOverlay.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
             emptyListOverlay.centerYAnchor.constraint(equalTo: clipView.centerYAnchor)
         ])
-        
-        
 
         // ボタンスタックに Import と Export ボタンを追加
         buttonStackView.addArrangedSubview(importButton)
         buttonStackView.addArrangedSubview(exportButton)
+        buttonStackView.addArrangedSubview(deleteButton)
+        
         // ボタンスタックの高さは固定（例：40pt）
         buttonStackView.heightAnchor.constraint(equalToConstant: 40).isActive = true
 
@@ -223,6 +272,15 @@ class ViewController: NSViewController {
         let sortedFileURLs = fileURLs.sorted { (url1, url2) -> Bool in
             url1.lastPathComponent.localizedStandardCompare(url2.lastPathComponent) == .orderedAscending
         }
+        
+        // 事前に読み込みチェック（読み込めないファイルをカウント）
+        let failedReadCount = sortedFileURLs.filter { NSImage(contentsOf: $0) == nil }.count
+        if failedReadCount > 0 {
+            let alert = NSAlert()
+            alert.messageText = "Warning"
+            alert.informativeText = "\(failedReadCount) file(s) failed to load and will be skipped."
+            alert.runModal()
+        }
 
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.pdf]
@@ -237,7 +295,7 @@ class ViewController: NSViewController {
                     
                 DispatchQueue.global().async {
                     self.createPDF(fileURLs: sortedFileURLs, outputURL: url)
-                    //self.deleteImageFiles(fileURLs: sortedFileURLs)
+
                     DispatchQueue.main.async {
                         self.progressIndicator.stopAnimation(nil)
                         self.progressIndicator.isHidden = true
@@ -271,8 +329,23 @@ class ViewController: NSViewController {
         panel.begin { (result) in
             if result == .OK {
                 self.fileURLs.append(contentsOf: panel.urls)
+                self.dragDropView.fileURLs.append(contentsOf: panel.urls)
             }
         }
+    }
+    
+    @objc func deleteSelectedImages() {
+        let selectedRows = tableView.selectedRowIndexes
+        guard selectedRows.count > 0 else {
+            return
+        }
+        
+        for index in selectedRows.sorted(by: >) {
+            fileURLs.remove(at: index)
+        }
+        
+        dragDropView.fileURLs = fileURLs
+        tableView.reloadData()
     }
 
     func preprocessImage(image: NSImage) -> NSImage? {
@@ -402,7 +475,7 @@ extension ViewController: NSTableViewDataSource, NSTableViewDelegate {
                let date = attributes[.creationDate] as? Date {
                 let formatter = DateFormatter()
                 formatter.dateStyle = .short
-                formatter.timeStyle = .short
+                formatter.timeStyle = .medium
                 text = formatter.string(from: date)
             } else {
                 text = "Unknown"
@@ -426,8 +499,14 @@ extension ViewController: NSTableViewDataSource, NSTableViewDelegate {
             ])
             cell?.textField = textField
         } else {
-            cell?.textField?.stringValue = fileURL.lastPathComponent
+            cell?.textField?.stringValue = text
         }
         return cell
+    }
+    
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let hasSelection = !tableView.selectedRowIndexes.isEmpty
+        deleteButton.isEnabled = hasSelection
+        deleteButton.alphaValue = hasSelection ? 1.0 : 0.5
     }
 }
