@@ -99,6 +99,16 @@ class ViewController: NSViewController {
         label.isHidden = false
         return label
     }()
+    
+    let progressIndicator: NSProgressIndicator = {
+        let progress = NSProgressIndicator()
+        progress.style = .spinning
+        progress.controlSize = .regular
+        progress.isDisplayedWhenStopped = false
+        progress.isHidden = false
+        progress.translatesAutoresizingMaskIntoConstraints = false
+        return progress
+    }()
 
     var fileURLs: [URL] = [] {
         didSet {
@@ -146,6 +156,8 @@ class ViewController: NSViewController {
             emptyListOverlay.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
             emptyListOverlay.centerYAnchor.constraint(equalTo: clipView.centerYAnchor)
         ])
+        
+        
 
         // ボタンスタックに Import と Export ボタンを追加
         buttonStackView.addArrangedSubview(importButton)
@@ -157,6 +169,14 @@ class ViewController: NSViewController {
         contentStackView.addArrangedSubview(tableScrollView)
         contentStackView.addArrangedSubview(buttonStackView)
         view.addSubview(contentStackView)
+        
+        view.addSubview(progressIndicator)
+        NSLayoutConstraint.activate([
+            progressIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            progressIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            progressIndicator.widthAnchor.constraint(equalToConstant: 32),
+            progressIndicator.heightAnchor.constraint(equalToConstant: 32)
+        ])
 
         // コンテンツスタックをウィンドウ全体にマージン付きで配置
         NSLayoutConstraint.activate([
@@ -209,9 +229,39 @@ class ViewController: NSViewController {
         savePanel.nameFieldStringValue = "output.pdf"
         savePanel.begin(completionHandler: { (response) in
             if response == .OK, let url = savePanel.url {
-                self.createPDF(fileURLs: sortedFileURLs, outputURL: url)
+                
+                DispatchQueue.main.async { [self] in
+                    progressIndicator.isHidden = false
+                    progressIndicator.startAnimation(nil)
+                }
+                    
+                DispatchQueue.global().async {
+                    self.createPDF(fileURLs: sortedFileURLs, outputURL: url)
+                    //self.deleteImageFiles(fileURLs: sortedFileURLs)
+                    DispatchQueue.main.async {
+                        self.progressIndicator.stopAnimation(nil)
+                        self.progressIndicator.isHidden = true
+                        
+                        self.dragDropView.fileURLs.removeAll()
+                        self.fileURLs.removeAll()
+                        let alert = NSAlert()
+                        alert.messageText = "success"
+                        alert.informativeText = "PDF file created successfully"
+                        alert.runModal()
+                    }
+                }
             }
         })
+    }
+    
+    func deleteImageFiles(fileURLs: [URL]) {
+        for fileURL in fileURLs {
+            do {
+                try FileManager.default.removeItem(at: fileURL)
+            } catch {
+                print("Failed to delete file at \(fileURL)")
+            }
+        }
     }
 
     @objc func importFiles() {
