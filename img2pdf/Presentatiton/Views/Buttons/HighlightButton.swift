@@ -10,6 +10,28 @@ import Cocoa
 class HighlightButton: NSButton {
     private var originalBackgroundColor: CGColor?
     
+    init(originalBackgroundColor: CGColor? = nil, title: String) {
+        super.init(frame: .zero)
+        self.title = title
+        self.originalBackgroundColor = originalBackgroundColor
+        self.wantsLayer = true
+        self.bezelStyle = .rounded
+        self.isBordered = false
+        self.translatesAutoresizingMaskIntoConstraints = false
+        
+        self.layer?.cornerRadius = 8
+        self.layer?.backgroundColor = originalBackgroundColor
+        self.contentTintColor = Theme.molokaiTextColor
+        self.font = .systemFont(ofSize: 16, weight: .medium)
+        
+        self.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        self.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     override func updateLayer() {
         super.updateLayer()
         

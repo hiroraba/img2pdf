@@ -58,7 +58,7 @@ class DragDropView: NSView {
         return false
     }
 
-    func containsPNGFile(draggingInfo: NSDraggingInfo) -> Bool {
+     private func containsPNGFile(draggingInfo: NSDraggingInfo) -> Bool {
         let pasteboard = draggingInfo.draggingPasteboard
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
             return urls.contains { $0.pathExtension == "png" }
