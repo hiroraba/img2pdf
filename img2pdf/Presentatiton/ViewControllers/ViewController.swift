@@ -187,6 +187,9 @@ class ViewController: NSViewController {
         tableView.delegate = self
         tableView.dataSource = self
         
+        self.deleteButton.isEnabled = false
+        self.deleteButton.alphaValue = 0.5
+        
         bindViewModel()
     }
     
