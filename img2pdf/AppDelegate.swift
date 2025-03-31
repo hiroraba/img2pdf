@@ -12,5 +12,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var window: NSWindow!
 
-    func applicationDidFinishLaunching(_ aNotification: Notification) {}
+    func applicationDidFinishLaunching(_ aNotification: Notification) {
+        DispatchQueue.main.async {
+            if let window = NSApplication.shared.windows.first {
+                window.setContentSize(NSSize(width: 480, height: 320))
+                window.center()
+            }
+        }
+    }
 }

@@ -8,12 +8,12 @@
 import Foundation
 
 class ConvertImagesToPDFUseCase {
-    private let pdfRepository: PDFRepository
-    init(pdfRepository: PDFRepository = PDFRepository()) {
+    private let pdfRepository: PDFRepositoryProtocols
+    init(pdfRepository: PDFRepositoryProtocols = PDFRepositoryImpl()) {
         self.pdfRepository = pdfRepository
     }
     
     func execute(with fileURLs: [URL], outputURL: URL) -> Bool {
-        return pdfRepository.createPDF(fileURLs: fileURLs, outputURL: outputURL)
+        return pdfRepository.createPDF(from: fileURLs, outputURL: outputURL)
     }
 }

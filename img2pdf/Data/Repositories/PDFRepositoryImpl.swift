@@ -1,5 +1,5 @@
 //
-//  PDFRepository.swift
+//  PDFRepositoryImpl.swift
 //  img2pdf
 //
 //  Created by 松尾宏規 on 2025/03/29.
@@ -9,10 +9,10 @@ import Foundation
 import PDFKit
 import Cocoa
 
-public class PDFRepository {
+public class PDFRepositoryImpl: PDFRepositoryProtocols {
     
     // swiftlint:disable:next function_body_length
-    func createPDF(fileURLs: [URL], outputURL: URL) -> Bool {
+    func createPDF(from fileURLs: [URL], outputURL: URL) -> Bool {
         let pdfDocument = PDFDocument()
         let targetDPI: CGFloat = 300.0
         let pointsPerInch: CGFloat = 72.0
@@ -82,7 +82,7 @@ public class PDFRepository {
         } else {
             print("No PDF pages were created.")
         }
-        return true 
+        return true
     }
     
     private func preprocessImage(image: NSImage) -> NSImage? {

@@ -17,20 +17,20 @@ class MainViewModel {
     
     private let disposeBag = DisposeBag()
     private let convertImagesToPDFUseCase: ConvertImagesToPDFUseCase
+    private let fileService: FileServiceProtocol
     
-    init(useCase: ConvertImagesToPDFUseCase = ConvertImagesToPDFUseCase()) {
+    init(useCase: ConvertImagesToPDFUseCase = ConvertImagesToPDFUseCase(),
+    fileService: FileServiceProtocol = FileServiceImpl()) {
         self.convertImagesToPDFUseCase = useCase
+        self.fileService = fileService
     }
     
     func importFiles() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png]
-        panel.allowsMultipleSelection = true
-        panel.begin { [weak self] result in
-            if result == .abort { return }
-            var currentFiles = self?.fileURLs.value ?? []
-            currentFiles.append(contentsOf: panel.urls)
-            self?.fileURLs.accept(currentFiles)
+        fileService.selectFiles {[weak self] urls in
+            guard let self = self else { return }
+            var currentFiles = self.fileURLs.value
+            currentFiles.append(contentsOf: urls)
+            self.fileURLs.accept(currentFiles)
         }
     }
     
@@ -39,28 +39,25 @@ class MainViewModel {
         guard !currentFiles.isEmpty else { return }
         
         let sortedFiles = currentFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = [.pdf]
-        savePanel.nameFieldStringValue = "output.pdf"
         isProcessiojnng.accept(true)
-        
-        savePanel.begin { [weak self] result in
-            guard let self = self else { return }
-            if result == .OK, let url = savePanel.url {
-                DispatchQueue.global().async {
-                    let success = self.convertImagesToPDFUseCase.execute(with: sortedFiles, outputURL: url)
-                    DispatchQueue.main.async {
-                        self.isProcessiojnng.accept(false)
-                        if success {
-                            self.fileURLs.accept([])
-                        } else {
-                            NSAlert().alertStyle = .warning
-                            NSAlert().runModal()
-                        }
+
+        fileService.saveFile(defaultName: "output.pdf") {[weak self] outputURL in
+            guard let self = self, let url = outputURL else {
+                self?.isProcessiojnng.accept(false)
+                return
+            }
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                let success = self.convertImagesToPDFUseCase.execute(with: sortedFiles, outputURL: url)
+                DispatchQueue.main.async {
+                    self.isProcessiojnng.accept(false)
+                    if success {
+                        self.fileURLs.accept([])
+                    } else {
+                        NSAlert().alertStyle = .warning
+                        NSAlert().runModal()
                     }
                 }
-            } else {
-                self.isProcessiojnng.accept(false)
             }
         }
     }
